@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "rag-simple",
+  "compatibility_date": "2026-07-02",
+  // static site: assets-only Worker — no "main", no SSR adapter needed
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
