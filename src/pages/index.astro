@@ -1,0 +1,139 @@
+---
+import Base from '../layouts/Base.astro';
+import { ladder, colabUrl } from '../ladder';
+
+const groups = ['FOUNDATION', 'RETRIEVAL', 'PRODUCTION'] as const;
+const groupNote: Record<string, string> = {
+  FOUNDATION: 'build it, break it, learn why the rest exists',
+  RETRIEVAL: 'the search engine inside your RAG — five ways to find the right page',
+  PRODUCTION: 'economics, speed, and the 2026 shape of the whole thing',
+};
+let i = 0;
+---
+<Base title="RAG Complete Book 📖">
+  <main class="wrap">
+    <header class="hero">
+      <p class="kicker">a hands-on course · every number is real</p>
+      <h1>The RAG <em>Complete Book</em></h1>
+      <p class="sub">
+        Ten posts. One tiny corpus. Each technique built <strong>from scratch</strong>, run for
+        real, and measured — then shown in its production form. Every post ships with a Colab
+        notebook you can run top to bottom.
+      </p>
+      <p class="hero-links">
+        <a class="btn-colab" href={colabUrl('00_naive_rag.ipynb')} target="_blank" rel="noopener">▶ Start practicing</a>
+        <a class="ghost" href="/resources">Resources</a>
+        <a class="ghost" href="https://github.com/madhudream/rag_simple" target="_blank" rel="noopener">GitHub</a>
+      </p>
+    </header>
+
+    <section class="ladder">
+      {groups.map((g) => (
+        <div class="group">
+          <div class="group-head">
+            <span class="group-name">{g}</span>
+            <span class="group-note">{groupNote[g]}</span>
+          </div>
+          {ladder.filter((r) => r.group === g).map((r) => (
+            <a class="rung" href={`/${r.slug}`} style={`animation-delay:${(i++) * 60}ms`}>
+              <span class="rung-num">{r.num}</span>
+              <span class="rung-emoji">{r.emoji}</span>
+              <span class="rung-body">
+                <span class="rung-title">{r.title}</span>
+                <span class="rung-meta">{r.metaphor}</span>
+              </span>
+              <span class="chip">{r.level}</span>
+            </a>
+          ))}
+        </div>
+      ))}
+    </section>
+
+    <footer class="foot">
+      <p>
+        Notebooks read <code>OPENAI_API_KEY</code> from Colab's Secrets sidebar (🔑) — add it
+        once, never paste it again. Retrieval models run locally and free.
+      </p>
+    </footer>
+  </main>
+</Base>
+
+<style>
+  .wrap { max-width: 780px; margin: 0 auto; padding: 4.5rem 1.4rem 5rem; }
+
+  .hero { margin-bottom: 3.6rem; }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin: 0 0 1rem;
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.6rem, 7vw, 4.2rem);
+    font-weight: 550;
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.1rem;
+  }
+  .hero h1 em { font-style: italic; color: var(--amber); }
+  .sub { max-width: 56ch; color: var(--ink-dim); margin: 0 0 1.6rem; }
+  .hero-links { display: flex; align-items: center; gap: 1.4rem; margin: 0; }
+  .ghost {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-dim);
+  }
+
+  .group { margin-bottom: 2.2rem; }
+  .group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin: 0 0 0.8rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .group-name {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+    color: var(--amber);
+  }
+  .group-note { font-size: 0.8rem; color: var(--muted); }
+
+  .rung {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    margin: 0.35rem -1rem;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    color: inherit;
+    animation: rise 0.5s ease both;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+  .rung:hover {
+    text-decoration: none;
+    background: var(--bg-raise);
+    border-color: var(--line);
+    transform: translateX(4px);
+  }
+  .rung-num {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--muted);
+    width: 2ch;
+  }
+  .rung-emoji { font-size: 1.2rem; }
+  .rung-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .rung-title { font-weight: 600; }
+  .rung-meta { font-size: 0.82rem; color: var(--muted); font-style: italic; font-family: var(--serif); }
+
+  .foot { margin-top: 3.5rem; padding-top: 1.4rem; border-top: 1px solid var(--line); }
+  .foot p { font-size: 0.82rem; color: var(--muted); }
+  .foot code { font-family: var(--mono); color: var(--amber); font-size: 0.78rem; }
+</style>

@@ -1,0 +1,305 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import { ladder, colabUrl, rungIndex } from '../ladder';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts');
+  return posts
+    .filter((p) => p.id !== 'resources')
+    .map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content, headings } = await render(post);
+
+const idx = rungIndex(post.id);
+const rung = ladder[idx];
+const prev = idx > 0 ? ladder[idx - 1] : null;
+const next = idx >= 0 && idx < ladder.length - 1 ? ladder[idx + 1] : null;
+const toc = headings.filter((h) => h.depth === 2);
+---
+<Base title={`${rung?.title ?? post.id} · RAG Complete Book`}>
+  <div class="shell" id="shell">
+    <nav class="rail-left">
+      <a class="home" href="/">📖 <span>RAG Complete Book</span></a>
+      <ol class="ladder-nav">
+        {ladder.map((r) => (
+          <li>
+            <a class={r.slug === post.id ? 'active' : ''} href={`/${r.slug}`} title={r.title}>
+              <span class="n">{r.num}</span>
+              <span class="t">{r.title}</span>
+            </a>
+          </li>
+        ))}
+      </ol>
+      {toc.length > 2 && (
+        <div class="toc">
+          <p class="toc-head">On this page</p>
+          <ol id="toc-list">
+            {toc.map((h) => (
+              <li><a data-slug={h.slug} href={`#${h.slug}`}>{h.text}</a></li>
+            ))}
+          </ol>
+        </div>
+      )}
+      <a class="res" href="/resources">resources</a>
+    </nav>
+
+    <article class="article" id="article">
+      {rung && (
+        <div class="post-head" data-nosection>
+          <span class="chip amber">{rung.emoji} {rung.level}</span>
+          <span class="metaphor">{rung.metaphor}</span>
+          {rung.notebook && (
+            <a class="btn-colab compact" href={colabUrl(rung.notebook)} target="_blank" rel="noopener">▶ Colab</a>
+          )}
+        </div>
+      )}
+      <Content />
+
+      <nav class="pager" data-nosection>
+        {prev ? (
+          <a class="pcard" href={`/${prev.slug}`}>
+            <span class="plabel">← previous</span>
+            <span class="ptitle">{prev.num} · {prev.title}</span>
+          </a>
+        ) : <span />}
+        {next ? (
+          <a class="pcard right" href={`/${next.slug}`}>
+            <span class="plabel">next →</span>
+            <span class="ptitle">{next.num} · {next.title}</span>
+          </a>
+        ) : <span />}
+      </nav>
+    </article>
+
+    <aside class="code-rail" id="code-rail" aria-hidden="true">
+      <div class="rail-head">
+        <span class="rail-label" id="rail-label">code · follows your reading</span>
+        {rung?.notebook && (
+          <a class="btn-colab compact" href={colabUrl(rung.notebook)} target="_blank" rel="noopener">
+            ▶ Practice
+          </a>
+        )}
+      </div>
+      <div class="panels" id="panels"></div>
+      {rung?.notebook && (
+        <p class="rail-note">
+          {rung.needsKey
+            ? 'Notebook needs an OpenAI key — add it once in Colab’s 🔑 Secrets sidebar.'
+            : 'Notebook needs no API key — everything runs locally.'}
+        </p>
+      )}
+    </aside>
+  </div>
+</Base>
+
+<script>
+  // ── scroll-synced code rail ─────────────────────────────────────────
+  // Clone each h2-section's code/output blocks into a sticky rail panel;
+  // as the reader scrolls the prose, the rail cross-fades to the section
+  // they're reading. Inline blocks stay in the article for < 1240px.
+  const article = document.getElementById('article')!;
+  const railEl = document.getElementById('panels')!;
+  const shell = document.getElementById('shell')!;
+  const label = document.getElementById('rail-label');
+
+  interface Section { slug: string; title: string; pres: Element[] }
+  const sections: Section[] = [{ slug: '__intro', title: 'intro', pres: [] }];
+  const anchors: { slug: string; el: Element }[] = [];
+
+  for (const el of Array.from(article.children)) {
+    if ((el as HTMLElement).dataset?.nosection !== undefined) continue;
+    if (el.tagName === 'H2') {
+      sections.push({ slug: el.id, title: el.textContent ?? '', pres: [] });
+      anchors.push({ slug: el.id, el });
+    } else if (el.tagName === 'PRE') {
+      sections[sections.length - 1].pres.push(el);
+    }
+  }
+
+  // build one panel per section that has code; remember nearest panel per section
+  const panelOf: (HTMLElement | null)[] = [];
+  let lastPanel: HTMLElement | null = null;
+  for (const s of sections) {
+    if (s.pres.length) {
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      for (const pre of s.pres) panel.appendChild(pre.cloneNode(true));
+      railEl.appendChild(panel);
+      lastPanel = panel;
+    }
+    panelOf.push(lastPanel);
+  }
+
+  const hasRail = railEl.children.length > 0;
+  if (hasRail) shell.classList.add('rail-on');
+
+  const tocLinks = new Map<string, Element>();
+  document.querySelectorAll('#toc-list a[data-slug]').forEach((a) => {
+    tocLinks.set((a as HTMLElement).dataset.slug!, a);
+  });
+
+  let current = -1;
+  function update() {
+    const probe = window.scrollY + window.innerHeight * 0.35;
+    let active = 0;
+    for (let i = 0; i < anchors.length; i++) {
+      if ((anchors[i].el as HTMLElement).offsetTop <= probe) active = i + 1;
+    }
+    if (active === current) return;
+    current = active;
+
+    if (hasRail) {
+      const target = panelOf[active];
+      railEl.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p === target));
+      if (label) {
+        const sec = sections[active];
+        label.textContent =
+          sec.pres.length || active === 0 ? 'code · ' + (active === 0 ? 'intro' : sec.title) : 'code · (from earlier section)';
+      }
+    }
+    const slug = active === 0 ? null : sections[active].slug;
+    tocLinks.forEach((a, s) => a.classList.toggle('active', s === slug));
+  }
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(() => { update(); ticking = false; });
+    }
+  }, { passive: true });
+  window.addEventListener('resize', update, { passive: true });
+  update();
+</script>
+
+<style>
+  .shell {
+    display: grid;
+    grid-template-columns: 205px minmax(0, 640px);
+    justify-content: center;
+    gap: 3rem;
+    max-width: 1560px;
+    margin: 0 auto;
+    padding: 3rem 1.4rem 5rem;
+  }
+  .shell.rail-on { grid-template-columns: 205px minmax(0, 560px) minmax(340px, 520px); }
+
+  /* on wide screens the rail owns the code — hide inline blocks */
+  @media (min-width: 1240px) {
+    .rail-on :global(.article > pre) { display: none; }
+  }
+
+  /* ── left rail ── */
+  .rail-left { position: sticky; top: 3rem; align-self: start; font-size: 0.82rem; max-height: calc(100vh - 5rem); overflow-y: auto; scrollbar-width: none; }
+  .rail-left::-webkit-scrollbar { display: none; }
+  .home {
+    display: flex; gap: 0.5rem; align-items: center;
+    font-family: var(--serif); font-style: italic; font-size: 0.95rem;
+    color: var(--ink); margin-bottom: 1.2rem;
+  }
+  .ladder-nav { list-style: none; margin: 0 0 1.4rem; padding: 0; border-left: 1px solid var(--line); }
+  .ladder-nav li a {
+    display: flex; gap: 0.6rem; align-items: baseline;
+    padding: 0.3rem 0 0.3rem 0.9rem;
+    color: var(--muted);
+    border-left: 2px solid transparent;
+    margin-left: -1.5px;
+  }
+  .ladder-nav li a:hover { color: var(--ink); text-decoration: none; }
+  .ladder-nav li a.active { color: var(--amber); border-left-color: var(--amber); }
+  .ladder-nav .n { font-family: var(--mono); font-size: 0.68rem; width: 2ch; flex: none; }
+  .ladder-nav .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .toc-head {
+    font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 0.4rem;
+  }
+  .toc ol { list-style: none; margin: 0 0 1.2rem; padding: 0; }
+  .toc li a {
+    display: block; padding: 0.18rem 0;
+    font-size: 0.75rem; color: var(--muted); line-height: 1.45;
+    border-left: 2px solid transparent;
+    padding-left: 0.6rem; margin-left: -1px;
+  }
+  .toc li a:hover { color: var(--amber); text-decoration: none; }
+  .toc li a.active { color: var(--amber); border-left-color: var(--amber); }
+  .res { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; color: var(--muted); }
+
+  /* ── article head ── */
+  .post-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.3rem; flex-wrap: wrap; }
+  .metaphor { font-family: var(--serif); font-style: italic; color: var(--muted); font-size: 0.92rem; flex: 1; }
+  .post-head .btn-colab { display: none; }
+
+  /* ── code rail ── */
+  .code-rail { display: none; }
+  @media (min-width: 1240px) {
+    .rail-on + * {} /* noop, keeps astro scoping happy */
+    .shell.rail-on .code-rail {
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 3rem;
+      align-self: start;
+      height: calc(100vh - 5rem);   /* definite height so .panels (flex:1) gets room */
+    }
+  }
+  .rail-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding-bottom: 0.6rem; margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .rail-label {
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .btn-colab.compact { padding: 0.4rem 0.8rem; font-size: 0.72rem; }
+
+  .panels { position: relative; flex: 1; min-height: 0; }
+  .panels :global(.panel) {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 0.28s ease, transform 0.28s ease, visibility 0.28s;
+    scrollbar-width: thin;
+    padding-bottom: 1rem;
+  }
+  .panels :global(.panel.on) { opacity: 1; visibility: visible; transform: translateY(0); }
+  .panels :global(.panel pre) { margin: 0.9rem 0; }
+  .panels :global(.panel pre:first-child) { margin-top: 0.6rem; }
+
+  .rail-note { font-size: 0.72rem; color: var(--muted); margin: 0.6rem 0 0; line-height: 1.5; }
+
+  /* ── pager ── */
+  .pager {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+    margin-top: 3.2rem; padding-top: 1.6rem; border-top: 1px solid var(--line);
+  }
+  .pcard {
+    display: flex; flex-direction: column; gap: 0.25rem;
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 0.9rem 1.1rem; color: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .pcard:hover { text-decoration: none; border-color: var(--amber); background: var(--bg-raise); }
+  .pcard.right { text-align: right; }
+  .plabel { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
+  .ptitle { font-size: 0.88rem; font-weight: 600; }
+
+  /* ── responsive ── */
+  @media (max-width: 1239px) {
+    .shell, .shell.rail-on { grid-template-columns: 205px minmax(0, 640px); }
+    .code-rail, .shell.rail-on .code-rail { display: none !important; }
+    .post-head .btn-colab { display: inline-flex; }
+  }
+  @media (max-width: 900px) {
+    .shell, .shell.rail-on { grid-template-columns: minmax(0, 1fr); }
+    .rail-left { display: none; }
+  }
+</style>

@@ -1,0 +1,18 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+
+const posts = await getCollection('posts');
+const resources = posts.find((p) => p.id === 'resources')!;
+const { Content } = await render(resources);
+---
+<Base title="Resources · RAG Complete Book">
+  <main class="wrap article">
+    <p><a href="/">← back to the ladder</a></p>
+    <Content />
+  </main>
+</Base>
+
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: 3rem 1.4rem 5rem; }
+</style>
